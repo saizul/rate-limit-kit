@@ -1,0 +1,39 @@
+name: Bug report
+description: A wrong limit, header or middleware behaviour
+labels: [bug]
+body:
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: The algorithm and its options, the store and the middleware call.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: The requests (times and costs) and the results or headers you got. A failing test with a fake clock is ideal.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: rate-limit-kit version
+      placeholder: '0.1.0'
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime, framework and versions
+      placeholder: 'Node 22.12, Express 5.1 / Next.js 16 / Hono 4.7 / Workers'
+    validations:
+      required: true
