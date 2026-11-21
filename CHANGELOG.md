@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `gcra({ limit, windowMs, burst? })`: the generic cell rate algorithm.
+  `limit` requests per `windowMs` spread evenly with a configurable burst
+  (default `limit`), exact integer math, and a two-number state. With the
+  default burst it answers exactly like `tokenBucket()` at the same rate.
+
 ## [0.1.0] - 2026-11-19
 
 ### Added

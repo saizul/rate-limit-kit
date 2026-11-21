@@ -3,6 +3,7 @@
 import {
   createRateLimiter,
   fixedWindow,
+  gcra,
   slidingWindowCounter,
   slidingWindowLog,
   tokenBucket,
@@ -13,6 +14,7 @@ const algorithms = [
   slidingWindowLog({ limit: 5, windowMs: 1000 }),
   slidingWindowCounter({ limit: 5, windowMs: 1000 }),
   tokenBucket({ capacity: 5, refillRate: 5 }),
+  gcra({ limit: 5, windowMs: 1000 }),
 ];
 
 for (const algorithm of algorithms) {

@@ -1,6 +1,9 @@
 export {
   type FixedWindowState,
   fixedWindow,
+  type GcraOptions,
+  type GcraState,
+  gcra,
   type SlidingCounterState,
   type SlidingLogState,
   slidingWindowCounter,

@@ -9,7 +9,7 @@
 
 Rate limiting that works the same in Express, Next.js, Hono, Bun, Deno and Cloudflare Workers, in memory or on Redis.
 
-- **Four algorithms**: token bucket, fixed window, sliding window log and sliding window counter. Exact integer math, a cost per request, and rejected requests never use quota.
+- **Five algorithms**: token bucket, GCRA, fixed window, sliding window log and sliding window counter. Exact integer math, a cost per request, and rejected requests never use quota.
 - **Pluggable stores**: an in-memory LRU store is built in. `RedisStore` works with *any* Redis client (ioredis, node-redis, Upstash, Valkey...) through two functions, `get` and `eval`, so there is no Redis dependency.
 - **Middleware** for Express / Connect / `node:http`, for Fetch-API handlers (Next.js route handlers, Remix, SvelteKit, Bun.serve, Deno.serve, Workers) and for Hono.
 - **Standard headers**: IETF `RateLimit-*` headers (draft 6, 7 or 8 and later), `Retry-After`, and optional legacy `X-RateLimit-*`.
@@ -92,10 +92,11 @@ if (!result.allowed) throw new Error(`Slow down, try again in ${result.retryAfte
 | --- | --- | --- | --- |
 | `slidingWindowCounter({ limit, windowMs })` | 3 numbers | Weighs the previous window by its overlap with the sliding window. Smooth, close to exact. | **The default for APIs.** |
 | `tokenBucket({ capacity, refillRate, intervalMs? })` | 2 numbers | A burst of up to `capacity`, then `refillRate` tokens per `intervalMs` (default 1 s), refilled continuously. | Allowing short bursts while capping the average rate; login attempts; outgoing calls. |
+| `gcra({ limit, windowMs, burst? })` | 2 numbers | `limit` requests per `windowMs` spread evenly, with up to `burst` (default `limit`) back to back. Same answers as a token bucket. | Smooth limits on Redis with the smallest state; `burst: 1` spaces every request evenly. |
 | `fixedWindow({ limit, windowMs })` | 2 numbers | `limit` per clock-aligned window. A client can get up to 2x `limit` around a boundary. | Quotas that reset at known times; the cheapest option. |
 | `slidingWindowLog({ limit, windowMs })` | 1 timestamp per request | Exact: counts every request in the last `windowMs`. | Small limits that must be exact (e.g. 5 per hour). Avoid for limits in the thousands. |
 
-All four take an integer `cost` per request (default 1), and none of them count rejected requests, so a client that waits for `Retry-After` gets in on time. Run `node examples/algorithms.mjs` to see them side by side.
+All five take an integer `cost` per request (default 1), and none of them count rejected requests, so a client that waits for `Retry-After` gets in on time. Run `node examples/algorithms.mjs` to see them side by side.
 
 An algorithm is a small object with a pure `step(state, now, cost)` function, so you can write your own (see the `Algorithm` type).
 
@@ -248,7 +249,7 @@ assert.equal((await limiter.consume('k')).allowed, true);
 
 The scripts in [`examples/`](examples) run against the build without network access:
 
-- [`algorithms.mjs`](examples/algorithms.mjs): the four algorithms on the same burst.
+- [`algorithms.mjs`](examples/algorithms.mjs): the five algorithms on the same burst.
 - [`node-http.mjs`](examples/node-http.mjs): the Node/Express middleware on a `node:http` server.
 - [`fetch-handler.mjs`](examples/fetch-handler.mjs): a Fetch-API (Next.js style) handler.
 - [`redis-store.mjs`](examples/redis-store.mjs): `RedisStore` with ioredis or node-redis (needs `REDIS_URL`).
@@ -272,7 +273,6 @@ The scripts in [`examples/`](examples) run against the build without network acc
 
 Ideas for the next versions. Those marked *good first issue* are small and described in [CONTRIBUTING.md](CONTRIBUTING.md#good-first-issues).
 
-- GCRA (generic cell rate algorithm) (*good first issue*)
 - `draft-8` partition key (`pk`) parameter (*good first issue*)
 - Ready-made `RateLimit-Policy` for several policies in one response
 - A Fastify plugin and a Koa middleware (*good first issue*)
