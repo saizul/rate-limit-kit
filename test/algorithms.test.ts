@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   createRateLimiter,
   fixedWindow,
+  gcra,
   RateLimiter,
   slidingWindowCounter,
   slidingWindowLog,
@@ -150,6 +151,67 @@ describe('tokenBucket', () => {
     assert.deepEqual(await hit('k', 2), [true, 1, 2000, 0]);
     assert.deepEqual(await hit('k', 2), [false, 1, 2000, 1000]);
     assert.deepEqual(await hit('k', 1), [true, 0, 3000, 0]);
+  });
+});
+
+describe('gcra', () => {
+  it('matches a token bucket with the same rate', async () => {
+    const a = limiterWith(gcra({ limit: 5, windowMs: 5000 }));
+    const b = limiterWith(tokenBucket({ capacity: 5, refillRate: 1 }));
+    const steps = [0, 0, 0, 0, 0, 0, 500, 500, 10_000, 1, 333, 0, 0, 0, 0, 0, 0, 1999];
+    for (const ms of steps) {
+      a.time.advance(ms);
+      b.time.advance(ms);
+      assert.deepEqual(await a.hit(), await b.hit());
+    }
+  });
+
+  it('allows a burst of limit, then one request per windowMs / limit', async () => {
+    const { hit, time } = limiterWith(gcra({ limit: 5, windowMs: 5000 }));
+    for (let i = 4; i >= 0; i--) assert.deepEqual((await hit()).slice(0, 2), [true, i]);
+    assert.deepEqual(await hit(), [false, 0, 5000, 1000]);
+    time.advance(500);
+    assert.deepEqual(await hit(), [false, 0, 4500, 500]);
+    time.advance(500);
+    assert.deepEqual(await hit(), [true, 0, 5000, 0]);
+  });
+
+  it('burst: 1 spaces requests evenly', async () => {
+    const { hit, time } = limiterWith(gcra({ limit: 10, windowMs: 1000, burst: 1 }));
+    assert.deepEqual(await hit(), [true, 0, 100, 0]);
+    assert.deepEqual(await hit(), [false, 0, 100, 100]);
+    time.advance(100);
+    assert.deepEqual(await hit(), [true, 0, 100, 0]);
+  });
+
+  it('keeps fractional intervals exact', async () => {
+    // 3 per second is one request every 333.33 ms; rounding errors would drift.
+    const { hit, time } = limiterWith(gcra({ limit: 3, windowMs: 1000, burst: 1 }), 1_700_000_000_000);
+    let allowed = 0;
+    for (let t = 0; t < 3000; t++) {
+      if ((await hit())[0]) allowed++;
+      time.advance(1);
+    }
+    assert.equal(allowed, 9);
+  });
+
+  it('supports a cost, does not charge rejected requests and stores one timestamp', async () => {
+    const { hit } = limiterWith(gcra({ limit: 3, windowMs: 3000 }));
+    assert.deepEqual(await hit('k', 2), [true, 1, 2000, 0]);
+    assert.deepEqual(await hit('k', 2), [false, 1, 2000, 1000]);
+    assert.deepEqual(await hit('k', 1), [true, 0, 3000, 0]);
+    const step = gcra({ limit: 3, windowMs: 1000 }).step(undefined, 1000, 1);
+    assert.deepEqual(Object.keys(step.state), ['a', 'r']);
+  });
+
+  it('reports the burst as the limit and the time to recover it as the window', () => {
+    const a = gcra({ limit: 60, windowMs: 60_000 });
+    assert.equal(a.limit, 60);
+    assert.equal(a.windowMs, 60_000);
+    const b = gcra({ limit: 60, windowMs: 60_000, burst: 10 });
+    assert.equal(b.limit, 10);
+    assert.equal(b.windowMs, 10_000);
+    assert.throws(() => gcra({ limit: 1, windowMs: 1000, burst: 0 }), RangeError);
   });
 });
 

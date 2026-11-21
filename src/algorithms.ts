@@ -193,3 +193,58 @@ export function tokenBucket(options: TokenBucketOptions): Algorithm<TokenBucketS
     },
   };
 }
+
+export interface GcraOptions extends WindowOptions {
+  /**
+   * Requests that may arrive back to back before the rate applies. Default
+   * `limit`, which behaves like a token bucket holding `limit` tokens that
+   * refills over `windowMs`. Use 1 to space every request evenly.
+   */
+  burst?: number;
+}
+
+/**
+ * State of `gcra()`: the theoretical arrival time, kept exactly as whole
+ * milliseconds `a` plus `r / limit` of a millisecond.
+ */
+export interface GcraState {
+  a: number;
+  r: number;
+}
+
+/**
+ * GCRA (generic cell rate algorithm): `limit` requests per `windowMs`, spread
+ * evenly, with up to `burst` requests back to back. It gives the same answers
+ * as a token bucket but stores a single timestamp, which makes it the
+ * cheapest smooth limiter for Redis.
+ */
+export function gcra(options: GcraOptions): Algorithm<GcraState> {
+  const limit = positiveInt('limit', options.limit);
+  const windowMs = positiveInt('windowMs', options.windowMs);
+  const burst = positiveInt('burst', options.burst ?? limit);
+  // Times are scaled by `limit`, so one request costs exactly `windowMs` units.
+  const tolerance = burst * windowMs;
+  return {
+    name: 'gcra',
+    limit: burst,
+    windowMs: Math.ceil(tolerance / limit),
+    step(state, now, cost): Step<GcraState> {
+      // How far the theoretical arrival time is ahead of now, never negative.
+      const ahead = state ? Math.max(0, (state.a - now) * limit + state.r) : 0;
+      const next = ahead + cost * windowMs;
+      const allowed = next <= tolerance;
+      const used = allowed ? next : ahead;
+      const reset = Math.ceil(used / limit);
+      return {
+        state: { a: now + Math.floor(used / limit), r: used % limit },
+        ttlMs: Math.max(1, reset),
+        result: {
+          allowed,
+          remaining: Math.floor((tolerance - used) / windowMs),
+          resetMs: reset,
+          retryAfterMs: allowed ? 0 : Math.ceil((next - tolerance) / limit),
+        },
+      };
+    },
+  };
+}
